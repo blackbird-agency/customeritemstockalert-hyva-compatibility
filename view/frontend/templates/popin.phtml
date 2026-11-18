@@ -1,0 +1,290 @@
+<?php
+/**
+ * Blackbird Customer Item Stock Alert Hyvä Compatibility
+ *
+ * @copyright Copyright (c) 2026 Blackbird Agency (https://black.bird.eu)
+ * @license   MIT, see LICENSE.txt
+ */
+
+declare(strict_types=1);
+
+use Blackbird\CustomerItemStockAlert\Block\Popin;
+use Blackbird\CustomerItemStockAlert\ViewModel\CisaViewModel;
+use Blackbird\CustomerItemStockAlertHyvaCompatibility\ViewModel\StockAlertButton;
+use Hyva\Theme\Model\ViewModelRegistry;
+use Hyva\Theme\ViewModel\HeroiconsOutline;
+use Hyva\Theme\ViewModel\HyvaCsp;
+use Hyva\Theme\ViewModel\Modal;
+use Magento\Framework\Escaper;
+
+/**
+ * Subscription dialog (port of Blackbird_CustomerItemStockAlert/js/modalStockAlert.js), rendered only when the
+ * product page shows the alert button. Alpine components: initCisaButton (opens it), initCisaModal (the dialog).
+ * Written CSP-compatible: no expression with arguments in the markup, loop values read through `this.item`.
+ *
+ * @var Popin $block
+ * @var Escaper $escaper
+ * @var ViewModelRegistry $viewModels
+ * @var HyvaCsp|null $hyvaCsp
+ */
+
+$product = $block->getProduct();
+if (!$viewModels->require(StockAlertButton::class)->getMode($product)) {
+    return;
+}
+/** @var CisaViewModel $cisaViewModel */
+$cisaViewModel = $block->getCisaViewModel();
+$outOfStockChildren = $cisaViewModel->getOutOfStockChildren($product);
+
+// the product itself (hidden, checked) or one checkbox per out of stock child; virtual products behave like simple
+$items = [];
+if ($product->getTypeId() !== 'configurable'
+    || ($block->getParentButtonStatus() && (int) $outOfStockChildren['inStock'] === 0)
+) {
+    $items[] = ['id' => (string) $product->getId(), 'label' => (string) $product->getName(), 'checked' => true,
+        'visible' => false];
+} else {
+    $attributes = array_filter($cisaViewModel->getAttributesToDisplay() ?: []);
+    foreach ($cisaViewModel->getOutOfStockChildrenAttributes($product) as $child) {
+        $label = [];
+        foreach ($attributes as $attribute) {
+            $text = $child->getAttributeText($attribute);
+            $label[] = is_array($text) ? implode(', ', $text) : (string) $text;
+        }
+        $label = trim(implode(' ', array_filter($label, 'strlen')));
+        $items[] = ['id' => (string) $child->getId(), 'label' => $label !== '' ? $label : (string) $child->getName(),
+            'checked' => false, 'visible' => true];
+    }
+}
+
+$config = [
+    'url' => $block->getAjaxUrl(),
+    'autoclose' => $block->getAutocloseStatus() === 'true',
+    'autocloseTime' => $block->getAutocloseTime(),
+    'items' => $items,
+    'messages' => [
+        'notifyMe' => (string) __('Notify me'),
+        'close' => (string) __('Close'),
+        'invalidEmail' => (string) __('Please enter a valid email address.'),
+        'noItem' => (string) __('Please check at least one item.'),
+        'requestError' => (string) __("Error while registering to item's alert."),
+        'databaseError' => (string) __(
+            'Subscription could not be completed due to a database error. Please retry in few seconds.'
+        ),
+    ],
+];
+$bodyText = (string) $block->getBodyTextExplanation();
+$icons = $viewModels->require(HeroiconsOutline::class);
+$titleId = 'cisa-modal-title';
+
+ob_start();
+?>
+<div class="flex items-start justify-between gap-4 mb-4">
+    <h2 id="<?= $escaper->escapeHtmlAttr($titleId) ?>" class="text-xl font-medium">
+        <?= $escaper->escapeHtml(__('Notify me when the product becomes available')) ?>
+    </h2>
+    <button type="button" class="p-1 -m-1 text-gray-500 hover:text-gray-900" @click="hide"
+            aria-label="<?= $escaper->escapeHtmlAttr(__('Close')) ?>">
+        <?= $icons->xHtml('w-6 h-6', 24, 24, ['aria-hidden' => 'true']) ?>
+    </button>
+</div>
+<p id="cisa-modal-product" class="font-semibold mb-2"><?= $escaper->escapeHtml($product->getName()) ?></p>
+<form novalidate @submit.prevent="submit">
+    <div id="cisa-step1" x-show="isFormShown">
+        <?php if ($bodyText !== ''): ?>
+            <p class="mb-4 text-gray-700"><?= $escaper->escapeHtml($bodyText) ?></p>
+        <?php endif; ?>
+        <fieldset class="mb-2">
+            <legend class="sr-only"><?= $escaper->escapeHtml(__('Product')) ?></legend>
+            <template x-for="item in items" :key="item.id">
+                <div x-show="item.visible">
+                    <label class="flex items-center gap-2 py-1 cursor-pointer">
+                        <input type="checkbox" class="cisa-checkbox form-checkbox" name="itemId[]"
+                               :value="item.id" :checked="item.checked" @change="toggleItem">
+                        <span x-text="item.label"></span>
+                    </label>
+                </div>
+            </template>
+        </fieldset>
+        <p id="cisa-checkbox-error" class="text-sm text-red-600" x-text="checkboxError" aria-live="polite"></p>
+        <div class="mt-4">
+            <label for="cisa-email" class="label block mb-1">
+                <?= $escaper->escapeHtml(__('Email')) ?> <span class="text-red-600" aria-hidden="true">*</span>
+            </label>
+            <input type="email" id="cisa-email" name="email" class="form-input w-full" required autocomplete="email"
+                   placeholder="<?= $escaper->escapeHtmlAttr(__('Email')) ?>" x-model="email"
+                   aria-describedby="cisa-email-error" x-focus-first>
+        </div>
+    </div>
+    <p id="cisa-email-error" class="mt-1 text-sm text-red-600" x-html="emailError" aria-live="polite"></p>
+    <?php /* always rendered: a live region that appears with its content is not announced by screen readers */ ?>
+    <div id="cisa-message" class="space-y-2" x-html="messageHtml" aria-live="polite"></div>
+    <div class="mt-6 flex items-center justify-end gap-4">
+        <span class="text-sm text-gray-600" x-show="pending" x-cloak>
+            <?= $escaper->escapeHtml(__('Please wait...')) ?>
+        </span>
+        <button type="submit" id="cisa-submit" class="btn btn-primary" :disabled="pending" x-ref="submit" x-text="submitLabel">
+            <?= $escaper->escapeHtml(__('Notify me')) ?>
+        </button>
+    </div>
+</form>
+<?php
+$content = ob_get_clean();
+
+$modal = $viewModels->require(Modal::class)->createModal()
+    ->withDialogRefName('cisa-modal')
+    ->withAriaLabelledby($titleId)
+    ->addDialogClass('w-[calc(100%-2rem)]', 'max-w-lg', 'rounded-lg', 'bg-white', 'p-6', 'shadow-xl')
+    ->withContent($content);
+?>
+<script>
+    (() => {
+        const DIALOG = 'cisa-modal';
+        // same check as the Luma widget
+        const EMAIL = /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+        const escapeHtml = (text) => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        // server messages wrap unescaped product names in <b>: escape everything, then restore <b> only
+        const sanitizeMessage = (text) => escapeHtml(Array.isArray(text) ? text.join(' ') : text)
+            .replace(/&lt;(\/?)b&gt;/gi, '<$1b>');
+
+        function initCisaButton() {
+            return {
+                open() {
+                    window.dispatchEvent(new CustomEvent('hyva-modal-show', {
+                        detail: {dialog: DIALOG, focusAfterHide: this.$el}
+                    }));
+                }
+            };
+        }
+
+        function initCisaModal() {
+            const modal = hyva.modal({dialog: DIALOG});
+            const modalShow = modal.show;
+            let config = {items: [], messages: {}};
+            let sessionEmail = '';
+            let autocloseTimer = null;
+
+            return Object.assign(modal, {
+                email: '',
+                emailError: '',
+                checkboxError: '',
+                messageHtml: '',
+                step2: false,
+                closeMode: false,
+                pending: false,
+                items: [],
+
+                init() {
+                    config = JSON.parse(this.$el.dataset.cisaConfig);
+                    this.items = config.items.map((item) => Object.assign({}, item));
+                },
+                onPrivateContent(event) {
+                    sessionEmail = (event.detail.data.customer && event.detail.data.customer.email) || '';
+                    if (!this.opened[DIALOG] && !this.email) {
+                        this.email = sessionEmail;
+                    }
+                },
+                show(dialog, trigger) {
+                    this.reset();
+                    return modalShow.call(this, dialog, trigger);
+                },
+                // every opening starts over, like the Luma widget's openModal(); removed duplicates stay removed
+                reset() {
+                    window.clearTimeout(autocloseTimer);
+                    this.email = sessionEmail;
+                    this.emailError = '';
+                    this.checkboxError = '';
+                    this.messageHtml = '';
+                    this.step2 = false;
+                    this.closeMode = this.items.length === 0;
+                },
+                isFormShown() {
+                    return !this.step2;
+                },
+                submitLabel() {
+                    return this.closeMode ? config.messages.close : config.messages.notifyMe;
+                },
+                toggleItem() {
+                    this.item.checked = !this.item.checked;
+                },
+                submit() {
+                    if (this.closeMode) {
+                        this.hide();
+                        return;
+                    }
+                    if (this.pending) {
+                        return;
+                    }
+                    this.emailError = '';
+                    this.checkboxError = '';
+                    const email = this.email.trim();
+                    const ids = this.items.filter((item) => item.checked).map((item) => item.id);
+                    if (!EMAIL.test(email)) {
+                        this.emailError = escapeHtml(config.messages.invalidEmail);
+                    }
+                    if (ids.length === 0) {
+                        this.checkboxError = config.messages.noItem;
+                    }
+                    if (this.emailError || this.checkboxError) {
+                        return;
+                    }
+
+                    const body = new URLSearchParams(); // urlencoded, as sent by the Luma widget
+                    body.append('email', email);
+                    ids.forEach((id) => body.append('itemId[]', id));
+                    body.append('form_key', hyva.getFormKey());
+                    this.pending = true;
+                    fetch(config.url, {method: 'POST', body, headers: {'X-Requested-With': 'XMLHttpRequest'}})
+                        .then((response) => {
+                            if (!response.ok) {
+                                throw new Error(response.statusText);
+                            }
+                            return response.json();
+                        })
+                        .then((data) => this.processAnswer(data || {}))
+                        .catch(() => {
+                            this.emailError = escapeHtml(config.messages.requestError);
+                        })
+                        .finally(() => {
+                            this.pending = false;
+                        });
+                },
+                processAnswer(data) {
+                    const dbError = data['error-db'] ? escapeHtml(config.messages.databaseError) : '';
+                    if (data.success) {
+                        this.messageHtml = [sanitizeMessage(data.success), data.error && sanitizeMessage(data.error), dbError]
+                            .filter(Boolean).map((html) => '<p>' + html + '</p>').join('');
+                        this.step2 = true;
+                        this.closeMode = true;
+                        // step 1 (and the focused email field) is hidden: keep the keyboard focus in the dialog
+                        this.$nextTick(() => this.$refs.submit.focus());
+                        if (config.autoclose && !data.error) {
+                            autocloseTimer = window.setTimeout(() => this.opened[DIALOG] && this.hide(), config.autocloseTime);
+                        }
+                        return;
+                    }
+                    this.emailError = data.error ? sanitizeMessage(data.error)
+                        : (dbError || escapeHtml(config.messages.requestError));
+                    if (data.duplicate) {
+                        // duplicates depend on the email: only drop listed variants, never the product itself
+                        const duplicates = String(data.duplicate).split(', ');
+                        this.items = this.items.filter((item) => !item.visible || !duplicates.includes(item.id));
+                        this.closeMode = this.items.length === 0;
+                    }
+                }
+            });
+        }
+
+        window.addEventListener('alpine:init', () => {
+            Alpine.data('initCisaButton', initCisaButton);
+            Alpine.data('initCisaModal', initCisaModal);
+        }, {once: true});
+    })();
+</script>
+<?php isset($hyvaCsp) && $hyvaCsp->registerInlineScript() ?>
+<div x-data="initCisaModal"
+     data-cisa-config="<?= $escaper->escapeHtmlAttr(json_encode($config, JSON_INVALID_UTF8_SUBSTITUTE)) ?>"
+     @private-content-loaded.window="onPrivateContent">
+    <?= /** @noEscape */ $modal ?>
+</div>

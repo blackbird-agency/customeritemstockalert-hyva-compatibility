@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="cisa_my_product_alert_tab">
+            <arguments>
+                <argument name="alert_display" xsi:type="object">Blackbird\CustomerItemStockAlertHyvaCompatibility\ViewModel\AlertDisplay</argument>
+            </arguments>
+        </referenceBlock>
+        <!-- The alert list depends on the customer session: without a non-cacheable block, the full page cache
+             depersonalizes the layout and the list is always empty -->
+        <referenceContainer name="content">
+            <block class="Magento\Framework\View\Element\Text" name="cisa.customer.alerts.nocache" cacheable="false"/>
+        </referenceContainer>
+    </body>
+</page>

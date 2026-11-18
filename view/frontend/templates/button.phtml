@@ -1,0 +1,43 @@
+<?php
+/**
+ * Blackbird Customer Item Stock Alert Hyvä Compatibility
+ *
+ * @copyright Copyright (c) 2026 Blackbird Agency (https://black.bird.eu)
+ * @license   MIT, see LICENSE.txt
+ */
+
+declare(strict_types=1);
+
+use Blackbird\CustomerItemStockAlertHyvaCompatibility\ViewModel\StockAlertButton;
+use Hyva\Theme\Model\ViewModelRegistry;
+use Magento\Catalog\Block\Product\View;
+use Magento\Framework\Escaper;
+
+/**
+ * Product page alert button; opens the "cisa-modal" dialog rendered by popin.phtml (component: initCisaButton)
+ *
+ * @var View $block
+ * @var Escaper $escaper
+ * @var ViewModelRegistry $viewModels
+ */
+
+$product = $block->getProduct();
+$mode = $viewModels->require(StockAlertButton::class)->getMode($product);
+?>
+<?php if ($mode === StockAlertButton::MODE_PRODUCT): ?>
+    <div class="cisa-alert-action cisa-alert-action-<?= $escaper->escapeHtmlAttr($product->getTypeId()) ?>"
+         x-data="initCisaButton">
+        <button type="button" class="btn btn-primary text-sm" data-cisa-open @click="open">
+            <?= $escaper->escapeHtml(__('Notify me when the product becomes available')) ?>
+        </button>
+    </div>
+<?php elseif ($mode === StockAlertButton::MODE_CHILDREN): ?>
+    <div class="cisa-alert-action cisa-alert-action-<?= $escaper->escapeHtmlAttr($product->getTypeId()) ?>
+                flex flex-wrap items-center gap-x-4 gap-y-2"
+         x-data="initCisaButton">
+        <span><?= $escaper->escapeHtml(__('Some items are not available.')) ?></span>
+        <button type="button" class="btn btn-secondary text-sm" data-cisa-open @click="open">
+            <?= $escaper->escapeHtml(__('Notify me when they become available')) ?>
+        </button>
+    </div>
+<?php endif; ?>

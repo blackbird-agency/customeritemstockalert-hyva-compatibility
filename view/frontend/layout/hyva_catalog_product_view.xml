@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <!-- hyva.modal(), used by the subscription dialog -->
+    <update handle="hyva_modal"/>
+    <body>
+        <!-- Hyvä product-info.phtml renders only the children it names: show the button next to the stock status -->
+        <move element="product.info.configurable.customer_item_stock_alert_button" destination="product.info.stockqty"/>
+    </body>
+</page>

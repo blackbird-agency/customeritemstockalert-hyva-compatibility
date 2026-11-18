@@ -1,0 +1,23 @@
+{
+  "name": "blackbird/customeritemstockalert-hyva-compatibility",
+  "version": "1.0.0",
+  "description": "Blackbird Customer Item Stock Alert Compatibility with Hÿva Theme check https://store.bird.eu/ : to get a license of Customer Item Stock Alert base module.",
+  "type": "magento2-module",
+  "require": {
+    "php": ">=8.1",
+    "blackbird/customeritemstockalert": "^100.0.16",
+    "hyva-themes/magento2-theme-module": "^1.5",
+    "hyva-themes/magento2-compat-module-fallback": "^1.0"
+  },
+  "license": [
+    "MIT"
+  ],
+  "autoload": {
+    "files": [
+      "registration.php"
+    ],
+    "psr-4": {
+      "Blackbird\\CustomerItemStockAlertHyvaCompatibility\\": ""
+    }
+  }
+}

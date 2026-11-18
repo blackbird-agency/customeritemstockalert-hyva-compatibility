@@ -1,0 +1,119 @@
+<?php
+/**
+ * Blackbird Customer Item Stock Alert Hyvä Compatibility
+ *
+ * @copyright Copyright (c) 2026 Blackbird Agency (https://black.bird.eu)
+ * @license   MIT, see LICENSE.txt
+ */
+
+declare(strict_types=1);
+
+use Blackbird\CustomerItemStockAlert\Block\Customer\CustomerProductAlert;
+use Blackbird\CustomerItemStockAlertHyvaCompatibility\ViewModel\AlertDisplay;
+use Hyva\Theme\Model\ViewModelRegistry;
+use Magento\Framework\Escaper;
+
+/**
+ * "My Product Alerts" customer page: a table on desktop, one card per alert on small screens
+ *
+ * @var CustomerProductAlert $block
+ * @var Escaper $escaper
+ * @var ViewModelRegistry $viewModels
+ */
+
+/** @var AlertDisplay $display */
+$display = $block->getData('alert_display') ?: $viewModels->require(AlertDisplay::class);
+$subscriptions = $block->getAllAlerts();
+$multistore = $block->cisaConfig->isMultistoreAllowed();
+$cell = 'flex justify-between gap-4 py-1 md:table-cell md:py-3 md:px-2 md:align-middle';
+$mobileLabel = 'font-medium md:hidden';
+?>
+<div class="cisa-customer-panel">
+    <p class="cisa-customer-panel__results mb-4">
+        <?= $escaper->escapeHtml(__('Total pending alerts:')) ?> <?= (int) count($subscriptions) ?>
+    </p>
+    <?php if ($subscriptions): ?>
+        <table class="cisa-alerts w-full text-left">
+            <thead class="hidden md:table-header-group border-b border-gray-300">
+                <tr>
+                    <th scope="col" class="py-2 px-2" colspan="2"><?= $escaper->escapeHtml(__('Product')) ?></th>
+                    <th scope="col" class="py-2 px-2"><?= $escaper->escapeHtml(__('Stock status')) ?></th>
+                    <th scope="col" class="py-2 px-2"><?= $escaper->escapeHtml(__('Price')) ?></th>
+                    <?php if ($multistore): ?>
+                        <th scope="col" class="py-2 px-2"><?= $escaper->escapeHtml(__('Store')) ?></th>
+                    <?php endif; ?>
+                    <th scope="col" class="py-2 px-2"><?= $escaper->escapeHtml(__('Subscribed')) ?></th>
+                    <th scope="col" class="py-2 px-2"><?= $escaper->escapeHtml(__('Alert email send')) ?></th>
+                    <th scope="col" class="py-2 px-2"><?= $escaper->escapeHtml(__('Action')) ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($subscriptions as $subscription): ?>
+                    <?php
+                    $product = $subscription['product'];
+                    $inStock = (bool) current($subscription['stock']);
+                    // the base block returns "&check;" (icon format) or a formatted date
+                    $sentAt = html_entity_decode($block->getSentAtDisplay($subscription['sent_at']), ENT_HTML5);
+                    ?>
+                    <tr class="block border-b border-gray-300 py-4 md:table-row md:py-0">
+                        <td class="block mb-2 md:table-cell md:mb-0 md:py-3 md:px-2 md:w-24">
+                            <img class="w-20 h-20 object-contain" loading="lazy" width="80" height="80"
+                                 src="<?= $escaper->escapeUrl($display->getImageUrl($product)) ?>"
+                                 alt="<?= $escaper->escapeHtmlAttr($product->getName()) ?>">
+                        </td>
+                        <td class="block py-1 md:table-cell md:py-3 md:px-2">
+                            <a class="cisa-product-link font-medium hover:underline"
+                               href="<?= $escaper->escapeUrl($subscription['url']) ?>">
+                                <?= $escaper->escapeHtml($product->getName()) ?>
+                            </a>
+                        </td>
+                        <td class="<?= $escaper->escapeHtmlAttr($cell) ?>">
+                            <span class="<?= $escaper->escapeHtmlAttr($mobileLabel) ?>">
+                                <?= $escaper->escapeHtml(__('Stock status')) ?>
+                            </span>
+                            <span><?= $escaper->escapeHtml($inStock ? __('In stock') : __('Out of stock')) ?></span>
+                        </td>
+                        <td class="<?= $escaper->escapeHtmlAttr($cell) ?>">
+                            <span class="<?= $escaper->escapeHtmlAttr($mobileLabel) ?>">
+                                <?= $escaper->escapeHtml(__('Price')) ?>
+                            </span>
+                            <span class="cisa-price"><?= $escaper->escapeHtml(
+                                $display->formatPrice($product->getPrice())
+                            ) ?></span>
+                        </td>
+                        <?php if ($multistore): ?>
+                            <td class="<?= $escaper->escapeHtmlAttr($cell) ?>">
+                                <span class="<?= $escaper->escapeHtmlAttr($mobileLabel) ?>">
+                                    <?= $escaper->escapeHtml(__('Store')) ?>
+                                </span>
+                                <span><?= $escaper->escapeHtml($display->getStoreName($subscription['store_id'])) ?></span>
+                            </td>
+                        <?php endif; ?>
+                        <td class="<?= $escaper->escapeHtmlAttr($cell) ?>">
+                            <span class="<?= $escaper->escapeHtmlAttr($mobileLabel) ?>">
+                                <?= $escaper->escapeHtml(__('Subscribed')) ?>
+                            </span>
+                            <span class="cisa-created"><?= $escaper->escapeHtml(
+                                $block->formatDate($subscription['created_at'], \IntlDateFormatter::MEDIUM)
+                            ) ?></span>
+                        </td>
+                        <td class="<?= $escaper->escapeHtmlAttr($cell) ?>">
+                            <span class="<?= $escaper->escapeHtmlAttr($mobileLabel) ?>">
+                                <?= $escaper->escapeHtml(__('Alert email send')) ?>
+                            </span>
+                            <span><?= $escaper->escapeHtml($sentAt) ?></span>
+                        </td>
+                        <td class="block pt-2 md:table-cell md:py-3 md:px-2">
+                            <a class="cisa-unsubscribe btn btn-secondary text-sm"
+                               href="<?= $escaper->escapeUrl($block->getUrl('*/*/unsubscribe', [
+                                   'item' => $subscription['customer_item_stock_alert_id']
+                               ])) ?>">
+                                <?= $escaper->escapeHtml(__('Unsubscribe')) ?>
+                            </a>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    <?php endif; ?>
+</div>
